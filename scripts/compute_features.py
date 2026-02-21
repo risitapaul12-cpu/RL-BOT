@@ -8,7 +8,7 @@ OUTPUT_DIR = "data/train"   # overwrite safely
 files = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
 
 for file in files:
-    print(f"Processing {file}...")
+    print(f"Processing {file}")
 
     df = pd.read_csv(os.path.join(DATA_DIR, file))
     df["Date"] = pd.to_datetime(df["Date"])
@@ -74,3 +74,4 @@ for file in files:
     print(f"Saved features → {file}")
 
 print("Asset feature engineering completed.")
+
