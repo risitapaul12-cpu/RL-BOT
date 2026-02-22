@@ -30,15 +30,14 @@ class TradingEnv(gym.Env):
         )
 
         self.initial_cash = 1_000_000
-        self.max_position_pct = 0.1  # 10% max allocation per asset
-        self.transaction_cost_pct = 0.001  # 0.1% per trade
+        self.max_position_pct = 0.1
 
         self.reset()
 
     def reset(self, seed=None, options=None):
         self.current_step = 0
         self.cash = self.initial_cash
-        self.positions = np.zeros(self.num_assets)  # number of shares
+        self.positions = np.zeros(self.num_assets)
         self.entry_prices = np.zeros(self.num_assets)
         self.days_held = np.zeros(self.num_assets)
         self.peak_value = self.initial_cash
@@ -52,43 +51,42 @@ class TradingEnv(gym.Env):
         prices_t = self.price_data[self.current_step]
         portfolio_value_before = self._calculate_portfolio_value(prices_t)
 
-        # Convert action into target portfolio allocation
         target_allocations = action * self.max_position_pct
         target_values = target_allocations * portfolio_value_before
 
         current_values = self.positions * prices_t
         trade_values = target_values - current_values
 
-        # Execute trades
         for i in range(self.num_assets):
 
             trade_value = trade_values[i]
             price = prices_t[i]
 
             if trade_value > 0:
-                # BUY
-                cost = trade_value * (1 + self.transaction_cost_pct)
-                if self.cash >= cost:
-                    shares_to_buy = trade_value / price
+                buy_value = trade_value
+                total_cost = self._calculate_buy_cost(buy_value)
+
+                if self.cash >= total_cost:
+                    shares_to_buy = buy_value / price
                     self.positions[i] += shares_to_buy
-                    self.cash -= cost
+                    self.cash -= total_cost
                     self.entry_prices[i] = price
                     self.days_held[i] = 0
 
             elif trade_value < 0:
-                # SELL
-                shares_to_sell = min(abs(trade_value) / price, self.positions[i])
-                proceeds = shares_to_sell * price
-                proceeds_after_cost = proceeds * (1 - self.transaction_cost_pct)
+                sell_value = min(abs(trade_value), self.positions[i] * price)
+
+                shares_to_sell = sell_value / price
+                proceeds = self._calculate_sell_proceeds(sell_value)
 
                 self.positions[i] -= shares_to_sell
-                self.cash += proceeds_after_cost
+                self.cash += proceeds
 
-                if self.positions[i] == 0:
+                if self.positions[i] <= 1e-8:
+                    self.positions[i] = 0
                     self.entry_prices[i] = 0
                     self.days_held[i] = 0
 
-        # Move to next timestep
         self.current_step += 1
         done = self.current_step >= len(self.price_data) - 1
 
@@ -105,9 +103,21 @@ class TradingEnv(gym.Env):
         position_value = np.sum(self.positions * prices)
         return self.cash + position_value
 
+    def _calculate_buy_cost(self, buy_value):
+        stt = 0.001 * buy_value
+        txn_charges = 0.0000297 * buy_value
+        gst = 0.18 * txn_charges
+        stamp = 0.00015 * buy_value
+        return buy_value + stt + txn_charges + gst + stamp
+
+    def _calculate_sell_proceeds(self, sell_value):
+        stt = 0.001 * sell_value
+        txn_charges = 0.0000297 * sell_value
+        gst = 0.18 * txn_charges
+        return sell_value - stt - txn_charges - gst
+
     def _get_state(self):
 
-        # Placeholder features (replace later with real features)
         asset_features = np.zeros(self.num_assets * self.features_per_asset)
 
         current_prices = self.price_data[self.current_step]
@@ -115,7 +125,7 @@ class TradingEnv(gym.Env):
 
         cash_ratio = self.cash / portfolio_value if portfolio_value > 0 else 0
         drawdown = (self.peak_value - portfolio_value) / self.peak_value
-        portfolio_vol = 0  # can implement later
+        portfolio_vol = 0
         gross_exposure = np.sum(np.abs(self.positions * current_prices)) / portfolio_value
 
         portfolio_features = np.array([
@@ -126,7 +136,5 @@ class TradingEnv(gym.Env):
         ])
 
         state = np.concatenate([asset_features, portfolio_features])
-
-        assert len(state) == self.state_dim
 
         return state.astype(np.float32)

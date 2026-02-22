@@ -7,7 +7,8 @@ from env.trading_env import TradingEnv
 
 # Create dummy price data
 # 200 timesteps, 15 assets
-dummy_prices = np.random.rand(200, 15) * 100
+returns = np.random.normal(0, 0.01, size=(200, 15))
+dummy_prices = 100 * np.cumprod(1 + returns, axis=0)
 
 # Create environment
 env = TradingEnv(dummy_prices)
